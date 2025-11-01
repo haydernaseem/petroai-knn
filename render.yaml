@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: petroai-knn
+    env: python
+    buildCommand: "bash build.sh"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
