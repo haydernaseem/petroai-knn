@@ -390,6 +390,22 @@
       gap: 1rem;
     }
 
+    .auto-coordinates {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .auto-coordinates input {
+      width: auto;
+    }
+
+    .auto-coordinates label {
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+
     .run-button {
       width: 100%;
       padding: 1rem;
@@ -494,6 +510,15 @@
       width: 100%;
       border-collapse: collapse;
       margin-top: 1rem;
+      max-height: 300px;
+      overflow-y: auto;
+      display: block;
+    }
+
+    .results-table thead {
+      position: sticky;
+      top: 0;
+      background: #1f2937;
     }
 
     .results-table th,
@@ -528,11 +553,75 @@
       border-radius: 10px;
       padding: 1rem;
       text-align: center;
+      margin-bottom: 1rem;
+      position: relative;
     }
 
     .contour-map img {
       max-width: 100%;
       border-radius: 8px;
+    }
+
+    .download-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 1rem;
+    }
+
+    .download-button {
+      background: linear-gradient(90deg, #8b5cf6, #7c3aed);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      font-family: "Poppins", sans-serif;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .download-button:hover {
+      opacity: 0.9;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+    }
+
+    .data-table-container {
+      max-height: 400px;
+      overflow-y: auto;
+      margin-top: 1rem;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table th {
+      position: sticky;
+      top: 0;
+      background: #1f2937;
+      color: #60a5fa;
+      padding: 1rem;
+      text-align: left;
+      font-weight: 500;
+    }
+
+    .data-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+    }
+
+    .data-table tr:hover {
+      background: rgba(96, 165, 250, 0.1);
     }
 
     footer {
@@ -600,6 +689,10 @@
       
       .results-grid {
         grid-template-columns: 1fr;
+      }
+      
+      .download-buttons {
+        flex-direction: column;
       }
     }
 
@@ -800,6 +893,10 @@
               <input type="number" id="targetY" step="any" placeholder="Enter Y coordinate">
             </div>
           </div>
+          <div class="auto-coordinates">
+            <input type="checkbox" id="autoCenter" checked>
+            <label for="autoCenter">Auto-center coordinates based on data range</label>
+          </div>
         </div>
         
         <button class="run-button" id="runButton" disabled>Run KNN Interpolation</button>
@@ -832,20 +929,22 @@
             </div>
             
             <h4>Nearest Neighbors</h4>
-            <table class="results-table" id="neighborsTable">
-              <thead>
-                <tr>
-                  <th>Well Name</th>
-                  <th>X</th>
-                  <th>Y</th>
-                  <th>Z</th>
-                  <th>Distance</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Filled by JavaScript -->
-              </tbody>
-            </table>
+            <div class="data-table-container">
+              <table class="data-table" id="neighborsTable">
+                <thead>
+                  <tr>
+                    <th>Well Name</th>
+                    <th>X Coordinate</th>
+                    <th>Y Coordinate</th>
+                    <th>Z Value</th>
+                    <th>Distance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Filled by JavaScript -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
         
@@ -853,6 +952,14 @@
           <h3>Contour Map Visualization</h3>
           <div class="contour-map" id="contourMap">
             <!-- Contour map will be displayed here -->
+          </div>
+          <div class="download-buttons" id="downloadButtons">
+            <a href="#" class="download-button" id="downloadMap">
+              <span>📥 Download Map</span>
+            </a>
+            <a href="#" class="download-button" id="downloadData">
+              <span>📊 Download Data</span>
+            </a>
           </div>
         </div>
       </div>
@@ -886,6 +993,7 @@
       const coordinatesInput = document.getElementById("coordinatesInput");
       const targetX = document.getElementById("targetX");
       const targetY = document.getElementById("targetY");
+      const autoCenter = document.getElementById("autoCenter");
       const runButton = document.getElementById("runButton");
       const loading = document.getElementById("loading");
       const resultsSection = document.getElementById("resultsSection");
@@ -896,11 +1004,15 @@
       const neighborsTable = document.getElementById("neighborsTable");
       const visualizationSection = document.getElementById("visualizationSection");
       const contourMap = document.getElementById("contourMap");
+      const downloadButtons = document.getElementById("downloadButtons");
+      const downloadMap = document.getElementById("downloadMap");
+      const downloadData = document.getElementById("downloadData");
 
       let uploadedFile = null;
       let fileData = null;
+      let currentResults = null;
 
-      // User profile simulation (يمكن استبدالها بـ Firebase لاحقًا)
+      // User profile simulation
       userName.textContent = "Petro Engineer";
       userEmail.textContent = "engineer@petroai.com";
       userAvatar.textContent = "P";
@@ -932,7 +1044,6 @@
       document.getElementById("logoutBtn").addEventListener("click", () => {
         if (confirm("Are you sure you want to logout?")) {
           alert("Logged out successfully!");
-          // في التطبيق الحقيقي: window.location.href = "login.html";
         }
       });
 
@@ -984,8 +1095,14 @@
           });
           
           if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to upload file');
+            let errorMessage = 'Failed to upload file';
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+              errorMessage = `Server error: ${response.status}`;
+            }
+            throw new Error(errorMessage);
           }
           
           fileData = await response.json();
@@ -994,11 +1111,46 @@
           resultsSection.classList.remove('active');
           visualizationSection.style.display = 'none';
           
+          // Auto-set coordinates if enabled
+          if (autoCenter.checked) {
+            setAutoCoordinates(fileData);
+          }
+          
         } catch (error) {
           console.error('Error uploading file:', error);
           alert('Error uploading file: ' + error.message);
         } finally {
           loading.classList.remove('active');
+        }
+      }
+
+      function setAutoCoordinates(data) {
+        // Try to find reasonable default coordinates from preview data
+        if (data.preview && data.preview.length > 0) {
+          const preview = data.preview;
+          let xValues = [];
+          let yValues = [];
+          
+          // Extract X and Y values from preview
+          preview.forEach(row => {
+            if (row[xColumn.value] && !isNaN(row[xColumn.value])) {
+              xValues.push(parseFloat(row[xColumn.value]));
+            }
+            if (row[yColumn.value] && !isNaN(row[yColumn.value])) {
+              yValues.push(parseFloat(row[yColumn.value]));
+            }
+          });
+          
+          if (xValues.length > 0 && yValues.length > 0) {
+            // Set target to center of data range
+            const centerX = (Math.min(...xValues) + Math.max(...xValues)) / 2;
+            const centerY = (Math.min(...yValues) + Math.max(...yValues)) / 2;
+            
+            targetX.value = Math.round(centerX);
+            targetY.value = Math.round(centerY);
+            
+            checkColumnSelection();
+          }
         }
       }
 
@@ -1028,14 +1180,16 @@
         
         // Auto-select common column names if they exist
         const commonNames = {
-          x: ['X', 'x', 'XCOORD', 'xcoord', 'EASTING', 'easting', 'LONGITUDE', 'longitude'],
-          y: ['Y', 'y', 'YCOORD', 'ycoord', 'NORTHING', 'northing', 'LATITUDE', 'latitude'],
-          z: ['Z', 'z', 'PAY', 'pay', 'VALUE', 'value', 'DEPTH', 'depth', 'THICKNESS', 'thickness']
+          x: ['XCOORD', 'X', 'x', 'EASTING', 'easting', 'LONGITUDE', 'longitude'],
+          y: ['YCOORD', 'Y', 'y', 'NORTHING', 'northing', 'LATITUDE', 'latitude'],
+          z: ['PAY', 'pay', 'Z', 'z', 'VALUE', 'value', 'DEPTH', 'depth', 'THICKNESS', 'thickness'],
+          well: ['WELLNAME', 'WELL', 'well', 'UID', 'ALIAS']
         };
         
         autoSelectColumn(xColumn, commonNames.x, data.all_columns);
         autoSelectColumn(yColumn, commonNames.y, data.all_columns);
         autoSelectColumn(zColumn, commonNames.z, data.all_columns);
+        autoSelectColumn(wellColumn, commonNames.well, data.all_columns);
       }
 
       function autoSelectColumn(select, preferredNames, availableColumns) {
@@ -1049,7 +1203,19 @@
 
       // Enable coordinates input when all required columns are selected
       [xColumn, yColumn, zColumn].forEach(select => {
-        select.addEventListener('change', checkColumnSelection);
+        select.addEventListener('change', () => {
+          checkColumnSelection();
+          if (autoCenter.checked) {
+            setAutoCoordinates(fileData);
+          }
+        });
+      });
+
+      // Auto-center when checkbox is toggled
+      autoCenter.addEventListener('change', () => {
+        if (autoCenter.checked && fileData) {
+          setAutoCoordinates(fileData);
+        }
       });
 
       function checkColumnSelection() {
@@ -1104,13 +1270,20 @@
           });
 
           if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Interpolation failed');
+            let errorMessage = 'Interpolation failed';
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+              errorMessage = `Server error: ${response.status}`;
+            }
+            throw new Error(errorMessage);
           }
 
           const result = await response.json();
           
           if (result.success) {
+            currentResults = result;
             displayResults(result);
           } else {
             throw new Error(result.error || 'Unknown error');
@@ -1149,24 +1322,54 @@
         });
         
         // Display contour map
-        contourMap.innerHTML = `<img src="${result.contour_plot}" alt="KNN Contour Map" style="max-width: 100%; height: auto;">`;
+        if (result.contour_plot) {
+          contourMap.innerHTML = `<img src="${result.contour_plot}" alt="KNN Contour Map" style="max-width: 100%; height: auto;">`;
+          
+          // Set up download buttons
+          downloadMap.href = result.contour_plot;
+          downloadMap.download = `contour_map_${result.target_x}_${result.target_y}.png`;
+          
+          // Create data download
+          const csvData = convertToCSV(result);
+          const blob = new Blob([csvData], { type: 'text/csv' });
+          downloadData.href = URL.createObjectURL(blob);
+          downloadData.download = `knn_data_${result.target_x}_${result.target_y}.csv`;
+        } else {
+          contourMap.innerHTML = '<p>No contour map available</p>';
+        }
         
         // Show results and visualization sections
         resultsSection.classList.add('active');
         visualizationSection.style.display = 'block';
+        downloadButtons.style.display = 'flex';
         
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
-      // Example data for demonstration
-      function loadExampleData() {
-        targetX.value = "1500";
-        targetY.value = "1200";
-        kValue.value = "5";
+      function convertToCSV(result) {
+        const headers = ['Well Name', 'X Coordinate', 'Y Coordinate', 'Z Value', 'Distance'];
+        const rows = result.nearest_neighbors.map(neighbor => [
+          neighbor.well_name,
+          neighbor.x.toFixed(4),
+          neighbor.y.toFixed(4),
+          neighbor.z.toFixed(4),
+          neighbor.distance.toFixed(4)
+        ]);
+        
+        // Add summary row
+        rows.push(['INTERPOLATED VALUE', '', '', result.interpolated_value.toFixed(4), '']);
+        
+        return [headers, ...rows].map(row => row.join(',')).join('\n');
       }
 
       // Load example data on page load for demo
+      function loadExampleData() {
+        targetX.value = "460000";
+        targetY.value = "5795000";
+        kValue.value = "5";
+      }
+
       loadExampleData();
     });
   </script>
