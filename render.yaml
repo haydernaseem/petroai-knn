@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: petroai-knn
+    env: python
+    plan: free
+    branch: main
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: gunicorn app:app
+    pythonVersion: "3.11.0"
