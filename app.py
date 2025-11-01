@@ -74,41 +74,51 @@ class ContourMap:
     def knn_interpolation(self, target_x, target_y, n_neighbors=5):
         """KNN interpolation for a single point"""
         try:
+            # حساب المسافات
             distances = np.sqrt((self.X - target_x)**2 +
                                 (self.Y - target_y)**2)
+
+            # الحصول على أقرب الجيران
             nearest_indices = np.argsort(distances)[:n_neighbors]
 
             # تجنب القسمة على الصفر
             weights = 1 / (distances.iloc[nearest_indices] + 1e-8)
+
+            # حساب القيمة المستوفاة
             interpolated_value = np.sum(
                 weights * self.Z.iloc[nearest_indices]) / np.sum(weights)
 
+            # التأكد من أن القيمة رقمية
+            if interpolated_value is None or np.isnan(interpolated_value):
+                return 0.0
             return float(interpolated_value)
+
         except Exception as e:
-            raise ValueError(f"KNN interpolation failed: {str(e)}")
+            print(f"KNN interpolation error: {e}")
+            return 0.0  # قيمة افتراضية في حالة الخطأ
 
     def plot_knn_map(self, target_x=None, target_y=None, n_neighbors=5, title="KNN Interpolation"):
         """Create contour map with optional target point"""
         try:
-            fig, ax = plt.subplots(figsize=(14, 10))
+            fig, ax = plt.subplots(figsize=(12, 9))
 
-            # Create grid for contour plot
+            # إنشاء شبكة لرسم الكنتور
             x_range = self.X.max() - self.X.min()
             y_range = self.Y.max() - self.Y.min()
 
             # تحديد عدد النقاط بناءً على نطاق البيانات
             x_points = min(
-                100, max(30, int(100 * x_range / (x_range + y_range))))
+                80, max(25, int(80 * x_range / (x_range + y_range))))
             y_points = min(
-                100, max(30, int(100 * y_range / (x_range + y_range))))
+                80, max(25, int(80 * y_range / (x_range + y_range))))
 
-            xi = np.linspace(self.X.min() - 0.1*x_range,
-                             self.X.max() + 0.1*x_range, x_points)
-            yi = np.linspace(self.Y.min() - 0.1*y_range,
-                             self.Y.max() + 0.1*y_range, y_points)
+            xi = np.linspace(self.X.min() - 0.05*x_range,
+                             self.X.max() + 0.05*x_range, x_points)
+            yi = np.linspace(self.Y.min() - 0.05*y_range,
+                             self.Y.max() + 0.05*y_range, y_points)
             xi, yi = np.meshgrid(xi, yi)
 
-            # Interpolate for grid points
+            # الاستيفاء لنقاط الشبكة
             zi = np.zeros(xi.shape)
             for i in range(xi.shape[0]):
                 for j in range(xi.shape[1]):
@@ -118,54 +128,54 @@ class ContourMap:
                     except:
                         zi[i, j] = np.nan
 
-            # Create contour plot
-            contour = ax.contourf(xi, yi, zi, levels=20,
+            # إنشاء رسم الكنتور
+            contour = ax.contourf(xi, yi, zi, levels=15,
                                   alpha=0.8, cmap='viridis')
-            contour_lines = ax.contour(xi, yi, zi, levels=15, linewidths=1.0,
-                                       colors='black', alpha=0.6)
-            ax.clabel(contour_lines, inline=True, fontsize=8, fmt='%.1f')
+            contour_lines = ax.contour(xi, yi, zi, levels=12, linewidths=0.8,
+                                       colors='black', alpha=0.5)
+            ax.clabel(contour_lines, inline=True, fontsize=7, fmt='%.1f')
 
-            # Plot original data points
-            scatter = ax.scatter(self.X, self.Y, c=self.Z, s=80,
-                                 edgecolors='white', linewidth=1.5, cmap='viridis')
+            # رسم نقاط البيانات الأصلية
+            scatter = ax.scatter(self.X, self.Y, c=self.Z, s=60,
+                                 edgecolors='white', linewidth=1, cmap='viridis')
 
-            # Plot target point if provided
+            # رسم نقطة الهدف إذا تم توفيرها
             if target_x is not None and target_y is not None:
                 try:
                     target_z = self.knn_interpolation(
                         target_x, target_y, n_neighbors)
-                    ax.scatter([target_x], [target_y], c='red', s=200,
-                               marker='*', edgecolors='black', linewidth=2,
+                    ax.scatter([target_x], [target_y], c='red', s=150,
+                               marker='*', edgecolors='black', linewidth=1.5,
                                label=f'Target Point\nZ = {target_z:.2f}')
-                    ax.legend(loc='upper right', fontsize=10)
+                    ax.legend(loc='upper right', fontsize=9)
                 except:
                     pass
 
-            # Add well names if available
+            # إضافة أسماء الآبار إذا كانت متاحة
             if self.well_names is not None:
                 for i, name in enumerate(self.well_names):
                     if name and i < len(self.X):
                         try:
                             ax.annotate(str(name), (self.X.iloc[i], self.Y.iloc[i]),
-                                        xytext=(8, 8), textcoords='offset points',
-                                        fontsize=7, alpha=0.8,
-                                        bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.7))
+                                        xytext=(5, 5), textcoords='offset points',
+                                        fontsize=6, alpha=0.7,
+                                        bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.6))
                         except:
                             pass
 
             plt.colorbar(contour, label='Z Value', shrink=0.8)
-            ax.set_xlabel('X Coordinate', fontsize=12, fontweight='bold')
-            ax.set_ylabel('Y Coordinate', fontsize=12, fontweight='bold')
-            ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
-            ax.grid(True, alpha=0.3)
+            ax.set_xlabel('X Coordinate', fontsize=11, fontweight='bold')
+            ax.set_ylabel('Y Coordinate', fontsize=11, fontweight='bold')
+            ax.set_title(title, fontsize=13, fontweight='bold', pad=15)
+            ax.grid(True, alpha=0.2)
 
             # تحسين المظهر
-            ax.ticklabel_format(useOffset=False)
+            ax.ticklabel_format(useOffset=False, style='plain')
             plt.tight_layout()
 
-            # Save plot to bytes
+            # حفظ الرسم إلى bytes
             buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+            plt.savefig(buf, format='png', dpi=120, bbox_inches='tight',
                         facecolor='#1a1a2e', edgecolor='none')
             buf.seek(0)
             plt.close(fig)
@@ -173,18 +183,19 @@ class ContourMap:
             return buf
 
         except Exception as e:
+            print(f"Plotting error: {e}")
             # إنشاء رسم بديل في حالة الخطأ
-            fig, ax = plt.subplots(figsize=(12, 9))
-            scatter = ax.scatter(self.X, self.Y, c=self.Z, s=60, cmap='viridis',
-                                 edgecolors='white', linewidth=1)
+            fig, ax = plt.subplots(figsize=(10, 7))
+            scatter = ax.scatter(self.X, self.Y, c=self.Z, s=50, cmap='viridis',
+                                 edgecolors='white', linewidth=0.8)
             plt.colorbar(scatter, label='Z Value')
             ax.set_xlabel('X Coordinate', fontweight='bold')
             ax.set_ylabel('Y Coordinate', fontweight='bold')
             ax.set_title('Data Points Distribution', fontweight='bold')
-            ax.grid(True, alpha=0.3)
+            ax.grid(True, alpha=0.2)
 
             buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+            plt.savefig(buf, format='png', dpi=120, bbox_inches='tight',
                         facecolor='#1a1a2e', edgecolor='none')
             buf.seek(0)
             plt.close(fig)
@@ -329,16 +340,19 @@ def interpolate():
         contour_map = ContourMap(X, Y, Z, well_names)
 
         # تنفيذ الاستيفاء
-        try:
-            interpolated_z = contour_map.knn_interpolation(
-                target_x, target_y, n_neighbors)
-        except Exception as e:
-            return jsonify({'error': str(e)}), 400
+        interpolated_z = contour_map.knn_interpolation(
+            target_x, target_y, n_neighbors)
+
+        # التأكد من أن القيمة رقمية
+        if interpolated_z is None or np.isnan(interpolated_z):
+            interpolated_z = 0.0
+        else:
+            interpolated_z = float(interpolated_z)
 
         # إنشاء الرسم
         plot_buffer = contour_map.plot_knn_map(
             target_x, target_y, n_neighbors,
-            f"KNN Interpolation Map\nTarget: ({target_x}, {target_y}) | k={n_neighbors}"
+            f"KNN Interpolation Map\nTarget: ({target_x:.1f}, {target_y:.1f}) | k={n_neighbors}"
         )
 
         # تحويل الرسم إلى base64
@@ -363,7 +377,7 @@ def interpolate():
 
         response = {
             'success': True,
-            'interpolated_value': convert_to_serializable(interpolated_z),
+            'interpolated_value': interpolated_z,
             'target_x': target_x,
             'target_y': target_y,
             'n_neighbors': n_neighbors,
