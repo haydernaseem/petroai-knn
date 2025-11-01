@@ -2,17 +2,17 @@ import os
 import base64
 import io
 import matplotlib.pyplot as plt
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app = Flask(__name__)
 CORS(app)
 
-# ✅ خدمة الملفات الثابتة including knn.html
+# خدمة الملفات الثابتة
 
 
 @app.route('/')
@@ -46,8 +46,9 @@ class ContourMap:
         fig, ax = plt.subplots(figsize=(12, 10))
 
         # Create grid for contour plot
-        xi = np.linspace(self.X.min(), self.X.max(), 100)
-        yi = np.linspace(self.Y.min(), self.Y.max(), 100)
+        # قلل النقاط لتسريع العملية
+        xi = np.linspace(self.X.min(), self.X.max(), 50)
+        yi = np.linspace(self.Y.min(), self.Y.max(), 50)
         xi, yi = np.meshgrid(xi, yi)
 
         # Interpolate for grid points
@@ -58,8 +59,8 @@ class ContourMap:
                     xi[i, j], yi[i, j], n_neighbors)
 
         # Create contour plot
-        contour = ax.contourf(xi, yi, zi, levels=20, alpha=0.7)
-        ax.contour(xi, yi, zi, levels=20, linewidths=0.5,
+        contour = ax.contourf(xi, yi, zi, levels=15, alpha=0.7, cmap='viridis')
+        ax.contour(xi, yi, zi, levels=15, linewidths=0.5,
                    colors='black', alpha=0.5)
 
         # Plot original data points
@@ -69,27 +70,26 @@ class ContourMap:
         # Plot target point if provided
         if target_x is not None and target_y is not None:
             target_z = self.knn_interpolation(target_x, target_y, n_neighbors)
-            ax.scatter([target_x], [target_y], c='red', s=100,
+            ax.scatter([target_x], [target_y], c='red', s=150,
                        marker='*', label=f'Target (Z={target_z:.2f})')
             ax.legend()
 
         # Add well names if available
-        if self.well_names:
+        if self.well_names is not None:
             for i, name in enumerate(self.well_names):
                 ax.annotate(name, (self.X.iloc[i], self.Y.iloc[i]), xytext=(5, 5),
                             textcoords='offset points', fontsize=8)
 
         plt.colorbar(contour, label='Z Value')
-        plt.colorbar(scatter, label='Original Z Values')
         ax.set_xlabel('X Coordinate')
         ax.set_ylabel('Y Coordinate')
         ax.set_title(title)
 
         # Save plot to bytes
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
         buf.seek(0)
-        plt.close()
+        plt.close(fig)  # تأكد من إغلاق figure لحفظ الذاكرة
 
         return buf
 
@@ -113,57 +113,69 @@ def upload_file():
             'numeric_columns': df.select_dtypes(include=[np.number]).columns.tolist(),
             'text_columns': df.select_dtypes(include=['object']).columns.tolist(),
             'all_columns': df.columns.tolist(),
-            'preview': df.head().to_dict('records')
+            'preview': df.head().to_dict('records'),
+            'total_rows': len(df)
         }
 
         return jsonify(columns)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Error reading file: {str(e)}'}), 500
 
 
 @app.route('/interpolate', methods=['POST'])
 def interpolate():
     """Perform KNN interpolation and return results"""
     try:
-        data = request.json
-
+        # التحقق من وجود ملف
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
 
         file = request.files['file']
-        x_col = data.get('x_column')
-        y_col = data.get('y_column')
-        z_col = data.get('z_column')
-        well_col = data.get('well_column')
-        target_x = data.get('target_x')
-        target_y = data.get('target_y')
-        n_neighbors = data.get('n_neighbors', 5)
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
 
-        # Read data
+        # الحصول على البيانات من form
+        x_col = request.form.get('x_column')
+        y_col = request.form.get('y_column')
+        z_col = request.form.get('z_column')
+        well_col = request.form.get('well_column')
+        target_x = float(request.form.get('target_x'))
+        target_y = float(request.form.get('target_y'))
+        n_neighbors = int(request.form.get('n_neighbors', 5))
+
+        # قراءة البيانات
         df = pd.read_excel(file)
 
-        # Extract columns
+        # التحقق من الأعمدة
+        for col in [x_col, y_col, z_col]:
+            if col not in df.columns:
+                return jsonify({'error': f'Column {col} not found in data'}), 400
+
+        # استخراج البيانات
         X = df[x_col]
         Y = df[y_col]
         Z = df[z_col]
-        well_names = df[well_col].tolist() if well_col else None
+        well_names = df[well_col].tolist(
+        ) if well_col and well_col in df.columns else None
 
-        # Create contour map
+        # إنشاء خريطة الكنتور
         contour_map = ContourMap(X, Y, Z, well_names)
 
-        # Perform interpolation
+        # تنفيذ الاستيفاء
         interpolated_z = contour_map.knn_interpolation(
             target_x, target_y, n_neighbors)
 
-        # Generate contour plot
-        plot_buffer = contour_map.plot_knn_map(target_x, target_y, n_neighbors,
-                                               f"KNN Interpolation (k={n_neighbors})")
+        # إنشاء الرسم
+        plot_buffer = contour_map.plot_knn_map(
+            target_x, target_y, n_neighbors,
+            f"KNN Interpolation (k={n_neighbors})"
+        )
 
-        # Convert plot to base64
+        # تحويل الرسم إلى base64
         plot_base64 = base64.b64encode(plot_buffer.getvalue()).decode('utf-8')
 
-        # Get nearest neighbors info
+        # الحصول على معلومات الجيران الأقرب
         distances = np.sqrt((X - target_x)**2 + (Y - target_y)**2)
         nearest_indices = np.argsort(distances)[:n_neighbors]
         nearest_neighbors = []
@@ -179,23 +191,29 @@ def interpolate():
             nearest_neighbors.append(neighbor_info)
 
         response = {
+            'success': True,
             'interpolated_value': float(interpolated_z),
             'target_x': target_x,
             'target_y': target_y,
             'n_neighbors': n_neighbors,
             'nearest_neighbors': nearest_neighbors,
-            'contour_plot': f"data:image/png;base64,{plot_base64}"
+            'contour_plot': f"data:image/png;base64,{plot_base64}",
+            'total_data_points': len(df)
         }
 
         return jsonify(response)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Interpolation error: {str(e)}'}), 500
 
 
-@app.route('/health')
+@app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'healthy', 'service': 'PetroAI KNN'})
+    return jsonify({
+        'status': 'healthy',
+        'service': 'PetroAI KNN Interpolation',
+        'version': '1.0'
+    })
 
 
 if __name__ == '__main__':

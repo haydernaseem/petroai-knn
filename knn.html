@@ -783,7 +783,7 @@
           
           <div class="parameter-group">
             <label for="kValue">K Value (Number of Neighbors)</label>
-            <input type="number" id="kValue" min="1" value="5">
+            <input type="number" id="kValue" min="1" max="20" value="5">
           </div>
         </div>
         
@@ -863,11 +863,6 @@
     © 2025 PetroAI — All Rights Reserved
   </footer>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-  <script src="./js/firebase-config.js"></script>
-
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       // User authentication and profile management
@@ -905,24 +900,12 @@
       let uploadedFile = null;
       let fileData = null;
 
-      // ✅ تحقق من تسجيل الدخول
-      auth.onAuthStateChanged((user) => {
-        if (user) {
-          const displayName = user.displayName || "User";
-          const email = user.email;
-          
-          userName.textContent = displayName;
-          userEmail.textContent = email;
-          
-          const initial = displayName.charAt(0).toUpperCase();
-          userAvatar.textContent = initial;
-        } else {
-          alert("⚠️ Please log in first.");
-          window.location.href = "index.html";
-        }
-      });
+      // User profile simulation (يمكن استبدالها بـ Firebase لاحقًا)
+      userName.textContent = "Petro Engineer";
+      userEmail.textContent = "engineer@petroai.com";
+      userAvatar.textContent = "P";
 
-      // ✅ فتح / إغلاق قائمة البروفايل
+      // فتح / إغلاق قائمة البروفايل
       profileArea.addEventListener("click", (e) => {
         e.stopPropagation();
         dropdownMenu.classList.toggle("active");
@@ -933,22 +916,24 @@
         dropdownMenu.classList.remove("active");
       });
 
-      // ✅ الأزرار داخل القائمة المنسدلة
+      // الأزرار داخل القائمة المنسدلة
       document.getElementById("profileBtn").addEventListener("click", () => {
-        window.location.href = "profile.html";
+        alert("👤 Profile page coming soon!");
       });
 
       document.getElementById("settingsBtn").addEventListener("click", () => {
-        alert("⚙️ Coming soon: Change password, upload profile photo, and manage notifications!");
+        alert("⚙️ Settings page coming soon!");
       });
 
       document.getElementById("privacyBtn").addEventListener("click", () => {
-        alert("🔒 PetroAI ensures your data privacy under strict security policies.");
+        alert("🔒 Your data is secure with PetroAI.");
       });
 
-      document.getElementById("logoutBtn").addEventListener("click", async () => {
-        await auth.signOut();
-        window.location.href = "index.html";
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        if (confirm("Are you sure you want to logout?")) {
+          alert("Logged out successfully!");
+          // في التطبيق الحقيقي: window.location.href = "login.html";
+        }
       });
 
       // KNN Tool functionality
@@ -992,22 +977,28 @@
         formData.append('file', file);
         
         try {
-          const response = await fetch('http://localhost:5000/upload', {
+          loading.classList.add('active');
+          const response = await fetch('/upload', {
             method: 'POST',
             body: formData
           });
           
           if (!response.ok) {
-            throw new Error('Failed to upload file');
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to upload file');
           }
           
           fileData = await response.json();
           populateColumnSelectors(fileData);
           columnSelection.classList.add('active');
+          resultsSection.classList.remove('active');
+          visualizationSection.style.display = 'none';
           
         } catch (error) {
           console.error('Error uploading file:', error);
           alert('Error uploading file: ' + error.message);
+        } finally {
+          loading.classList.remove('active');
         }
       }
 
@@ -1037,9 +1028,9 @@
         
         // Auto-select common column names if they exist
         const commonNames = {
-          x: ['X', 'x', 'XCOORD', 'xcoord', 'LONGITUDE', 'longitude'],
-          y: ['Y', 'y', 'YCOORD', 'ycoord', 'LATITUDE', 'latitude'],
-          z: ['Z', 'z', 'PAY', 'pay', 'VALUE', 'value', 'DEPTH', 'depth']
+          x: ['X', 'x', 'XCOORD', 'xcoord', 'EASTING', 'easting', 'LONGITUDE', 'longitude'],
+          y: ['Y', 'y', 'YCOORD', 'ycoord', 'NORTHING', 'northing', 'LATITUDE', 'latitude'],
+          z: ['Z', 'z', 'PAY', 'pay', 'VALUE', 'value', 'DEPTH', 'depth', 'THICKNESS', 'thickness']
         };
         
         autoSelectColumn(xColumn, commonNames.x, data.all_columns);
@@ -1080,41 +1071,50 @@
 
       // Run KNN interpolation
       runButton.addEventListener('click', async () => {
-        if (!uploadedFile || !fileData) {
+        if (!uploadedFile) {
           alert('Please upload a data file first');
           return;
         }
 
-        const interpolationData = {
-          file_path: uploadedFile.name, // In production, you'd need to handle file storage
-          x_column: xColumn.value,
-          y_column: yColumn.value,
-          z_column: zColumn.value,
-          well_column: wellColumn.value || null,
-          target_x: parseFloat(targetX.value),
-          target_y: parseFloat(targetY.value),
-          n_neighbors: parseInt(kValue.value) || 5
-        };
+        if (!targetX.value || !targetY.value) {
+          alert('Please enter target coordinates');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', uploadedFile);
+        formData.append('x_column', xColumn.value);
+        formData.append('y_column', yColumn.value);
+        formData.append('z_column', zColumn.value);
+        formData.append('well_column', wellColumn.value || '');
+        formData.append('target_x', targetX.value);
+        formData.append('target_y', targetY.value);
+        formData.append('n_neighbors', kValue.value);
 
         // Show loading state
         loading.classList.add('active');
         runButton.disabled = true;
+        resultsSection.classList.remove('active');
+        visualizationSection.style.display = 'none';
 
         try {
-          const response = await fetch('http://localhost:5000/interpolate', {
+          const response = await fetch('/interpolate', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(interpolationData)
+            body: formData
           });
 
           if (!response.ok) {
-            throw new Error('Interpolation failed');
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Interpolation failed');
           }
 
           const result = await response.json();
-          displayResults(result);
+          
+          if (result.success) {
+            displayResults(result);
+          } else {
+            throw new Error(result.error || 'Unknown error');
+          }
           
         } catch (error) {
           console.error('Error during interpolation:', error);
@@ -1130,7 +1130,7 @@
         resultZ.textContent = result.interpolated_value.toFixed(4);
         resultLocation.textContent = `(${result.target_x}, ${result.target_y})`;
         resultK.textContent = result.n_neighbors;
-        resultPoints.textContent = result.nearest_neighbors.length;
+        resultPoints.textContent = result.total_data_points;
         
         // Update neighbors table
         const tbody = neighborsTable.querySelector('tbody');
@@ -1149,12 +1149,25 @@
         });
         
         // Display contour map
-        contourMap.innerHTML = `<img src="${result.contour_plot}" alt="KNN Contour Map">`;
+        contourMap.innerHTML = `<img src="${result.contour_plot}" alt="KNN Contour Map" style="max-width: 100%; height: auto;">`;
         
         // Show results and visualization sections
         resultsSection.classList.add('active');
         visualizationSection.style.display = 'block';
+        
+        // Scroll to results
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
+
+      // Example data for demonstration
+      function loadExampleData() {
+        targetX.value = "1500";
+        targetY.value = "1200";
+        kValue.value = "5";
+      }
+
+      // Load example data on page load for demo
+      loadExampleData();
     });
   </script>
 </body>
