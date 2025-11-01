@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KNN Interpolation - PetroAI</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Poppins", sans-serif;
+      background: radial-gradient(circle at center, #0a0a0a, #1a1a2e, #111827);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ======= HEADER ======= */
+    header {
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #2563eb, #9333ea);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-text {
+      font-weight: 600;
+      font-size: 1.25rem;
+      color: #f1f5f9;
+      background: linear-gradient(90deg, #60a5fa, #9333ea);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    nav {
+      display: flex;
+      gap: 2rem;
+    }
+
+    nav a {
+      text-decoration: none;
+      color: #cbd5e1;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      position: relative;
+    }
+
+    nav a:hover {
+      color: #60a5fa;
+      background-color: rgba(96, 165, 250, 0.1);
+    }
+
+    nav a::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #60a5fa, #9333ea);
+      transition: width 0.3s ease;
+    }
+
+    nav a:hover::after {
+      width: 100%;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      transition: all 0.3s ease;
+    }
+
+    .user-profile:hover {
+      background-color: rgba(96, 165, 250, 0.1);
+    }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2563eb, #9333ea);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      color: white;
+    }
+
+    .user-info {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .user-name {
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+
+    .user-email {
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: 100%;
+      right: 2rem;
+      background: rgba(31, 41, 55, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+      padding: 0.5rem;
+      min-width: 180px;
+      display: none;
+      flex-direction: column;
+      z-index: 1000;
+      border: 1px solid #374151;
+    }
+
+    .dropdown-menu.active {
+      display: flex;
+    }
+
+    .dropdown-menu button {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      padding: 0.75rem 1rem;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      font-family: "Poppins", sans-serif;
+      font-size: 0.9rem;
+    }
+
+    .dropdown-menu button:hover {
+      background-color: rgba(96, 165, 250, 0.1);
+      color: #60a5fa;
+    }
+
+    .dropdown-divider {
+      height: 1px;
+      background-color: #374151;
+      margin: 0.25rem 0;
+    }
+
+    /* ======= MAIN CONTENT ======= */
+    .main-content {
+      flex-grow: 1;
+      padding: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    h1 {
+      background: linear-gradient(90deg, #60a5fa, #9333ea);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+
+    .page-subtitle {
+      color: #cbd5e1;
+      font-size: 1.2rem;
+      margin-bottom: 2rem;
+      opacity: 0.8;
+    }
+
+    /* ======= KNN CONTENT ======= */
+    .knn-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .knn-info {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2rem;
+      border-radius: 15px;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .knn-info h2 {
+      color: #60a5fa;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      font-weight: 600;
+    }
+
+    .info-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .info-section h3 {
+      color: #60a5fa;
+      font-size: 1.2rem;
+      margin-bottom: 0.75rem;
+      font-weight: 500;
+    }
+
+    .info-section p {
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin-bottom: 0.75rem;
+    }
+
+    .info-section ul {
+      color: #cbd5e1;
+      padding-left: 1.5rem;
+      line-height: 1.6;
+    }
+
+    .info-section li {
+      margin-bottom: 0.5rem;
+    }
+
+    .knn-tool {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2rem;
+      border-radius: 15px;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .knn-tool h2 {
+      color: #60a5fa;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      font-weight: 600;
+    }
+
+    .upload-area {
+      border: 2px dashed rgba(96, 165, 250, 0.5);
+      border-radius: 10px;
+      padding: 2rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .upload-area:hover {
+      border-color: #60a5fa;
+      background: rgba(96, 165, 250, 0.05);
+    }
+
+    .upload-area.dragover {
+      border-color: #60a5fa;
+      background: rgba(96, 165, 250, 0.1);
+    }
+
+    .upload-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      color: #60a5fa;
+    }
+
+    .upload-text {
+      color: #cbd5e1;
+      margin-bottom: 1rem;
+    }
+
+    .upload-button {
+      background: linear-gradient(90deg, #2563eb, #1e3a8a);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      font-family: "Poppins", sans-serif;
+    }
+
+    .upload-button:hover {
+      opacity: 0.9;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+    }
+
+    .file-name {
+      color: #60a5fa;
+      margin-top: 1rem;
+      font-weight: 500;
+    }
+
+    .column-selection {
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+
+    .column-selection.active {
+      display: block;
+    }
+
+    .parameter-group {
+      margin-bottom: 1rem;
+    }
+
+    .parameter-group label {
+      display: block;
+      color: #cbd5e1;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+
+    .parameter-group select,
+    .parameter-group input {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-family: "Poppins", sans-serif;
+    }
+
+    .parameter-group select:focus,
+    .parameter-group input:focus {
+      outline: none;
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+    }
+
+    .parameter-group select option {
+      background: #1f2937;
+      color: white;
+    }
+
+    .coordinates-input {
+      display: none;
+      margin-bottom: 1.5rem;
+    }
+
+    .coordinates-input.active {
+      display: block;
+    }
+
+    .coordinates-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .run-button {
+      width: 100%;
+      padding: 1rem;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #10b981, #059669);
+      color: white;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 1.1rem;
+      transition: all 0.3s ease;
+      font-family: "Poppins", sans-serif;
+      margin-bottom: 1.5rem;
+    }
+
+    .run-button:hover {
+      opacity: 0.9;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+
+    .run-button:disabled {
+      background: linear-gradient(90deg, #6b7280, #4b5563);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      margin: 1rem 0;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top: 3px solid #60a5fa;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .results {
+      display: none;
+    }
+
+    .results.active {
+      display: block;
+    }
+
+    .results h3 {
+      color: #60a5fa;
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+      font-weight: 500;
+    }
+
+    .results-content {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .result-item {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 1rem;
+      border-radius: 8px;
+    }
+
+    .result-label {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .result-value {
+      color: #60a5fa;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+
+    .results-table th,
+    .results-table td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .results-table th {
+      color: #60a5fa;
+      font-weight: 500;
+    }
+
+    .results-table td {
+      color: #cbd5e1;
+    }
+
+    .visualization {
+      margin-top: 1.5rem;
+    }
+
+    .visualization h3 {
+      color: #60a5fa;
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+      font-weight: 500;
+    }
+
+    .contour-map {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .contour-map img {
+      max-width: 100%;
+      border-radius: 8px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: #64748b;
+      font-size: 0.9rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      margin-top: auto;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* ======= RESPONSIVE DESIGN ======= */
+    
+    /* Tablets */
+    @media (max-width: 1024px) {
+      .knn-content {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+    }
+
+    /* Mobile phones */
+    @media (max-width: 768px) {
+      header {
+        padding: 1rem;
+      }
+      
+      nav {
+        gap: 1rem;
+      }
+      
+      .logo-text {
+        font-size: 1.1rem;
+      }
+      
+      nav a {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.9rem;
+      }
+      
+      .user-info {
+        display: none;
+      }
+      
+      .main-content {
+        padding: 1rem;
+      }
+      
+      .knn-info, .knn-tool {
+        padding: 1.5rem;
+      }
+      
+      h1 {
+        font-size: 2rem;
+      }
+      
+      .page-subtitle {
+        font-size: 1.1rem;
+      }
+      
+      .coordinates-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .results-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Small phones */
+    @media (max-width: 480px) {
+      header {
+        padding: 0.75rem 1rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      
+      .logo {
+        gap: 0.5rem;
+      }
+      
+      .logo-icon {
+        width: 28px;
+        height: 28px;
+      }
+      
+      .logo-text {
+        font-size: 1rem;
+      }
+      
+      nav {
+        gap: 0.5rem;
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        margin-top: 0.5rem;
+      }
+      
+      nav a {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.8rem;
+      }
+      
+      .user-profile {
+        margin-left: auto;
+      }
+      
+      .knn-info, .knn-tool {
+        padding: 1.25rem;
+      }
+      
+      .upload-area {
+        padding: 1.5rem;
+      }
+    }
+
+    /* Touch device improvements */
+    @media (hover: none) and (pointer: coarse) {
+      .upload-button:hover, .run-button:hover {
+        transform: none;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- ======= HEADER ======= -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L3 7V17L12 22L21 17V7L12 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 22V12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M17 7L12 12L7 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="logo-text">PetroAI</span>
+    </div>
+
+    <nav>
+      <a href="main.html">Home</a>
+      <a href="ai.html">AI Tools</a>
+      <a href="knn.html" style="color: #60a5fa;">KNN Interpolation</a>
+      <a href="contact.html">Contact Us</a>
+    </nav>
+
+    <div class="user-profile" id="profileArea">
+      <div class="user-avatar" id="userAvatar">U</div>
+      <div class="user-info">
+        <span class="user-name" id="userName">User</span>
+        <span class="user-email" id="userEmail">user@example.com</span>
+      </div>
+      
+      <div class="dropdown-menu" id="dropdownMenu">
+        <button id="profileBtn">👤 My Profile</button>
+        <button id="settingsBtn">⚙️ Settings</button>
+        <div class="dropdown-divider"></div>
+        <button id="privacyBtn">🔒 Privacy & Security</button>
+        <div class="dropdown-divider"></div>
+        <button id="logoutBtn">🚪 Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======= MAIN CONTENT ======= -->
+  <div class="main-content">
+    <div class="page-header">
+      <h1>KNN Interpolation</h1>
+      <p class="page-subtitle">K-Nearest Neighbors interpolation for contour mapping in the oil and gas industry</p>
+    </div>
+
+    <div class="knn-content">
+      <!-- Information Section -->
+      <div class="knn-info">
+        <h2>About KNN Interpolation</h2>
+        
+        <div class="info-section">
+          <h3>Concept</h3>
+          <p>KNN interpolation estimates unknown values by averaging the data points closest to the target location. It identifies the k nearest known samples in space and uses their values to predict the new point.</p>
+        </div>
+        
+        <div class="info-section">
+          <h3>Dependence on Distance</h3>
+          <p>The method relies on spatial proximity; points that are geographically closer have more influence on the interpolated value than distant ones.</p>
+        </div>
+        
+        <div class="info-section">
+          <h3>Handling Discontinuities</h3>
+          <p>KNN is effective in datasets with sharp boundaries or abrupt changes (such as fault zones or lithology transitions) because it doesn't assume smooth variation between points.</p>
+        </div>
+        
+        <div class="info-section">
+          <h3>Oil & Gas Application</h3>
+          <p>In reservoir and production mapping, KNN interpolation is used to generate contour maps of:</p>
+          <ul>
+            <li>Pressure distribution</li>
+            <li>Porosity estimation</li>
+            <li>Permeability mapping</li>
+            <li>Saturation analysis</li>
+          </ul>
+          <p>This helps engineers visualize subsurface variations and plan development strategies.</p>
+        </div>
+      </div>
+
+      <!-- Tool Section -->
+      <div class="knn-tool">
+        <h2>KNN Interpolation Tool</h2>
+        
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-icon">📊</div>
+          <p class="upload-text">Upload your Excel data file (.xlsx)</p>
+          <button class="upload-button" id="uploadButton">Choose File</button>
+          <input type="file" id="fileInput" accept=".xlsx, .xls" style="display: none;">
+          <p class="file-name" id="fileName">No file selected</p>
+        </div>
+        
+        <div class="column-selection" id="columnSelection">
+          <h3>Select Data Columns</h3>
+          
+          <div class="parameter-group">
+            <label for="xColumn">X Coordinate Column</label>
+            <select id="xColumn">
+              <option value="">Select X column</option>
+            </select>
+          </div>
+          
+          <div class="parameter-group">
+            <label for="yColumn">Y Coordinate Column</label>
+            <select id="yColumn">
+              <option value="">Select Y column</option>
+            </select>
+          </div>
+          
+          <div class="parameter-group">
+            <label for="zColumn">Z Value Column (to interpolate)</label>
+            <select id="zColumn">
+              <option value="">Select Z column</option>
+            </select>
+          </div>
+          
+          <div class="parameter-group">
+            <label for="wellColumn">Well Names Column (Optional)</label>
+            <select id="wellColumn">
+              <option value="">Select well names column</option>
+            </select>
+          </div>
+          
+          <div class="parameter-group">
+            <label for="kValue">K Value (Number of Neighbors)</label>
+            <input type="number" id="kValue" min="1" value="5">
+          </div>
+        </div>
+        
+        <div class="coordinates-input" id="coordinatesInput">
+          <h3>Enter Target Coordinates</h3>
+          <div class="coordinates-grid">
+            <div class="parameter-group">
+              <label for="targetX">Target X Coordinate</label>
+              <input type="number" id="targetX" step="any" placeholder="Enter X coordinate">
+            </div>
+            
+            <div class="parameter-group">
+              <label for="targetY">Target Y Coordinate</label>
+              <input type="number" id="targetY" step="any" placeholder="Enter Y coordinate">
+            </div>
+          </div>
+        </div>
+        
+        <button class="run-button" id="runButton" disabled>Run KNN Interpolation</button>
+        
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <p>Processing KNN interpolation...</p>
+        </div>
+        
+        <div class="results" id="resultsSection">
+          <h3>Interpolation Results</h3>
+          <div class="results-content">
+            <div class="results-grid">
+              <div class="result-item">
+                <div class="result-label">Interpolated Z Value</div>
+                <div class="result-value" id="resultZ">-</div>
+              </div>
+              <div class="result-item">
+                <div class="result-label">Target Location</div>
+                <div class="result-value" id="resultLocation">-</div>
+              </div>
+              <div class="result-item">
+                <div class="result-label">K Value Used</div>
+                <div class="result-value" id="resultK">-</div>
+              </div>
+              <div class="result-item">
+                <div class="result-label">Data Points</div>
+                <div class="result-value" id="resultPoints">-</div>
+              </div>
+            </div>
+            
+            <h4>Nearest Neighbors</h4>
+            <table class="results-table" id="neighborsTable">
+              <thead>
+                <tr>
+                  <th>Well Name</th>
+                  <th>X</th>
+                  <th>Y</th>
+                  <th>Z</th>
+                  <th>Distance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Filled by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="visualization" id="visualizationSection">
+          <h3>Contour Map Visualization</h3>
+          <div class="contour-map" id="contourMap">
+            <!-- Contour map will be displayed here -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    © 2025 PetroAI — All Rights Reserved
+  </footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="./js/firebase-config.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // User authentication and profile management
+      const userName = document.getElementById("userName");
+      const userEmail = document.getElementById("userEmail");
+      const userAvatar = document.getElementById("userAvatar");
+      const profileArea = document.getElementById("profileArea");
+      const dropdownMenu = document.getElementById("dropdownMenu");
+
+      // KNN Tool elements
+      const uploadArea = document.getElementById("uploadArea");
+      const uploadButton = document.getElementById("uploadButton");
+      const fileInput = document.getElementById("fileInput");
+      const fileName = document.getElementById("fileName");
+      const columnSelection = document.getElementById("columnSelection");
+      const xColumn = document.getElementById("xColumn");
+      const yColumn = document.getElementById("yColumn");
+      const zColumn = document.getElementById("zColumn");
+      const wellColumn = document.getElementById("wellColumn");
+      const kValue = document.getElementById("kValue");
+      const coordinatesInput = document.getElementById("coordinatesInput");
+      const targetX = document.getElementById("targetX");
+      const targetY = document.getElementById("targetY");
+      const runButton = document.getElementById("runButton");
+      const loading = document.getElementById("loading");
+      const resultsSection = document.getElementById("resultsSection");
+      const resultZ = document.getElementById("resultZ");
+      const resultLocation = document.getElementById("resultLocation");
+      const resultK = document.getElementById("resultK");
+      const resultPoints = document.getElementById("resultPoints");
+      const neighborsTable = document.getElementById("neighborsTable");
+      const visualizationSection = document.getElementById("visualizationSection");
+      const contourMap = document.getElementById("contourMap");
+
+      let uploadedFile = null;
+      let fileData = null;
+
+      // ✅ تحقق من تسجيل الدخول
+      auth.onAuthStateChanged((user) => {
+        if (user) {
+          const displayName = user.displayName || "User";
+          const email = user.email;
+          
+          userName.textContent = displayName;
+          userEmail.textContent = email;
+          
+          const initial = displayName.charAt(0).toUpperCase();
+          userAvatar.textContent = initial;
+        } else {
+          alert("⚠️ Please log in first.");
+          window.location.href = "index.html";
+        }
+      });
+
+      // ✅ فتح / إغلاق قائمة البروفايل
+      profileArea.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dropdownMenu.classList.toggle("active");
+      });
+
+      // إغلاق القائمة عند النقر خارجها
+      document.addEventListener("click", () => {
+        dropdownMenu.classList.remove("active");
+      });
+
+      // ✅ الأزرار داخل القائمة المنسدلة
+      document.getElementById("profileBtn").addEventListener("click", () => {
+        window.location.href = "profile.html";
+      });
+
+      document.getElementById("settingsBtn").addEventListener("click", () => {
+        alert("⚙️ Coming soon: Change password, upload profile photo, and manage notifications!");
+      });
+
+      document.getElementById("privacyBtn").addEventListener("click", () => {
+        alert("🔒 PetroAI ensures your data privacy under strict security policies.");
+      });
+
+      document.getElementById("logoutBtn").addEventListener("click", async () => {
+        await auth.signOut();
+        window.location.href = "index.html";
+      });
+
+      // KNN Tool functionality
+      uploadButton.addEventListener("click", () => {
+        fileInput.click();
+      });
+
+      fileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          handleFileUpload(file);
+        }
+      });
+
+      uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+      });
+
+      uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+      });
+
+      uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        
+        const file = e.dataTransfer.files[0];
+        if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+          handleFileUpload(file);
+        } else {
+          alert('Please upload a valid Excel file (.xlsx or .xls)');
+        }
+      });
+
+      async function handleFileUpload(file) {
+        uploadedFile = file;
+        fileName.textContent = file.name;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+          const response = await fetch('http://localhost:5000/upload', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to upload file');
+          }
+          
+          fileData = await response.json();
+          populateColumnSelectors(fileData);
+          columnSelection.classList.add('active');
+          
+        } catch (error) {
+          console.error('Error uploading file:', error);
+          alert('Error uploading file: ' + error.message);
+        }
+      }
+
+      function populateColumnSelectors(data) {
+        // Clear existing options
+        [xColumn, yColumn, zColumn, wellColumn].forEach(select => {
+          select.innerHTML = '<option value="">Select column</option>';
+        });
+        
+        // Add numeric columns to X, Y, Z selectors
+        data.numeric_columns.forEach(column => {
+          const option = document.createElement('option');
+          option.value = column;
+          option.textContent = column;
+          xColumn.appendChild(option.cloneNode(true));
+          yColumn.appendChild(option.cloneNode(true));
+          zColumn.appendChild(option.cloneNode(true));
+        });
+        
+        // Add all columns to well names selector
+        data.all_columns.forEach(column => {
+          const option = document.createElement('option');
+          option.value = column;
+          option.textContent = column;
+          wellColumn.appendChild(option);
+        });
+        
+        // Auto-select common column names if they exist
+        const commonNames = {
+          x: ['X', 'x', 'XCOORD', 'xcoord', 'LONGITUDE', 'longitude'],
+          y: ['Y', 'y', 'YCOORD', 'ycoord', 'LATITUDE', 'latitude'],
+          z: ['Z', 'z', 'PAY', 'pay', 'VALUE', 'value', 'DEPTH', 'depth']
+        };
+        
+        autoSelectColumn(xColumn, commonNames.x, data.all_columns);
+        autoSelectColumn(yColumn, commonNames.y, data.all_columns);
+        autoSelectColumn(zColumn, commonNames.z, data.all_columns);
+      }
+
+      function autoSelectColumn(select, preferredNames, availableColumns) {
+        for (const name of preferredNames) {
+          if (availableColumns.includes(name)) {
+            select.value = name;
+            break;
+          }
+        }
+      }
+
+      // Enable coordinates input when all required columns are selected
+      [xColumn, yColumn, zColumn].forEach(select => {
+        select.addEventListener('change', checkColumnSelection);
+      });
+
+      function checkColumnSelection() {
+        if (xColumn.value && yColumn.value && zColumn.value) {
+          coordinatesInput.classList.add('active');
+          runButton.disabled = !(targetX.value && targetY.value);
+        } else {
+          coordinatesInput.classList.remove('active');
+          runButton.disabled = true;
+        }
+      }
+
+      // Enable run button when coordinates are entered
+      [targetX, targetY].forEach(input => {
+        input.addEventListener('input', () => {
+          runButton.disabled = !(targetX.value && targetY.value && xColumn.value && yColumn.value && zColumn.value);
+        });
+      });
+
+      // Run KNN interpolation
+      runButton.addEventListener('click', async () => {
+        if (!uploadedFile || !fileData) {
+          alert('Please upload a data file first');
+          return;
+        }
+
+        const interpolationData = {
+          file_path: uploadedFile.name, // In production, you'd need to handle file storage
+          x_column: xColumn.value,
+          y_column: yColumn.value,
+          z_column: zColumn.value,
+          well_column: wellColumn.value || null,
+          target_x: parseFloat(targetX.value),
+          target_y: parseFloat(targetY.value),
+          n_neighbors: parseInt(kValue.value) || 5
+        };
+
+        // Show loading state
+        loading.classList.add('active');
+        runButton.disabled = true;
+
+        try {
+          const response = await fetch('http://localhost:5000/interpolate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(interpolationData)
+          });
+
+          if (!response.ok) {
+            throw new Error('Interpolation failed');
+          }
+
+          const result = await response.json();
+          displayResults(result);
+          
+        } catch (error) {
+          console.error('Error during interpolation:', error);
+          alert('Error during interpolation: ' + error.message);
+        } finally {
+          loading.classList.remove('active');
+          runButton.disabled = false;
+        }
+      });
+
+      function displayResults(result) {
+        // Update result summary
+        resultZ.textContent = result.interpolated_value.toFixed(4);
+        resultLocation.textContent = `(${result.target_x}, ${result.target_y})`;
+        resultK.textContent = result.n_neighbors;
+        resultPoints.textContent = result.nearest_neighbors.length;
+        
+        // Update neighbors table
+        const tbody = neighborsTable.querySelector('tbody');
+        tbody.innerHTML = '';
+        
+        result.nearest_neighbors.forEach(neighbor => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${neighbor.well_name}</td>
+            <td>${neighbor.x.toFixed(2)}</td>
+            <td>${neighbor.y.toFixed(2)}</td>
+            <td>${neighbor.z.toFixed(4)}</td>
+            <td>${neighbor.distance.toFixed(4)}</td>
+          `;
+          tbody.appendChild(row);
+        });
+        
+        // Display contour map
+        contourMap.innerHTML = `<img src="${result.contour_plot}" alt="KNN Contour Map">`;
+        
+        // Show results and visualization sections
+        resultsSection.classList.add('active');
+        visualizationSection.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
