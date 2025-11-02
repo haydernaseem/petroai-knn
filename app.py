@@ -2,7 +2,7 @@ import os
 import base64
 import io
 import matplotlib.pyplot as plt
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -14,7 +14,16 @@ import matplotlib
 matplotlib.use('Agg')
 
 app = Flask(__name__)
-CORS(app)
+
+# إعدادات CORS للسماح لـ Firebase Hosting
+CORS(app, origins=[
+    "https://petroai-web.web.app",
+    "https://petroai-web.firebaseapp.com",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+    "https://petroai-iq.web.app",  # استبدل بالنطاق الفعلي
+    "https://petroai-iq.web.app/KNN.html"  # استبدل بالنطاق الفعلي
+])
 
 # إعدادات التطبيق
 app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
@@ -200,16 +209,6 @@ class ContourMap:
             buf.seek(0)
             plt.close(fig)
             return buf
-
-
-@app.route('/')
-def serve_index():
-    return send_from_directory('.', 'knn.html')
-
-
-@app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('.', path)
 
 
 @app.route('/upload', methods=['POST'])
