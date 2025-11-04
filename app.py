@@ -7,6 +7,7 @@ from flask_cors import CORS
 import pandas as pd
 import numpy as np
 import math
+import re
 from werkzeug.utils import secure_filename
 
 # استخدام backend غير تفاعلي لـ matplotlib
@@ -21,12 +22,12 @@ CORS(app, origins=[
     "https://petroai-web.firebaseapp.com",
     "http://localhost:5000",
     "http://127.0.0.1:5000",
-    "https://petroai-iq.web.app",  # استبدل بالنطاق الفعلي
-    "https://petroai-iq.web.app/KNN.html"  # استبدل بالنطاق الفعلي
+    "https://petroai-iq.web.app",
+    "https://petroai-iq.web.app/KNN.html"
 ])
 
 # إعدادات التطبيق
-app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
+app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls', 'csv'}
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 
@@ -37,20 +38,341 @@ def allowed_file(filename):
            ) in app.config['ALLOWED_EXTENSIONS']
 
 
+def smart_column_detection(df):
+    """اكتشاف ذكي لنوع البيانات في الأعمدة"""
+    column_types = {}
+    column_stats = {}
+
+    for col in df.columns:
+        # استخراج القيم الرقمية من الأعمدة المختلطة
+        numeric_values = []
+        text_values = []
+        mixed_details = []
+
+        for idx, value in enumerate(df[col].dropna()):
+            if isinstance(value, (int, float)) and not pd.isna(value):
+                numeric_values.append(float(value))
+                mixed_details.append(
+                    {'index': idx, 'value': value, 'type': 'numeric'})
+            elif isinstance(value, str):
+                # البحث عن أرقام في النصوص
+                numbers = re.findall(r'-?\d+\.?\d*', value)
+                if numbers:
+                    numeric_val = float(numbers[0])
+                    numeric_values.append(numeric_val)
+                    mixed_details.append(
+                        {'index': idx, 'value': value, 'extracted': numeric_val, 'type': 'text_with_number'})
+                else:
+                    text_values.append(value)
+                    mixed_details.append(
+                        {'index': idx, 'value': value, 'type': 'text_only'})
+
+        # تحديد نوع العمول
+        numeric_ratio = len(numeric_values) / \
+            len(df[col]) if len(df[col]) > 0 else 0
+
+        if numeric_ratio >= 0.8:
+            col_type = 'numeric'
+        elif numeric_ratio >= 0.4:
+            col_type = 'mixed_numeric'
+        else:
+            col_type = 'text'
+
+        column_types[col] = col_type
+        column_stats[col] = {
+            'numeric_count': len(numeric_values),
+            'text_count': len(text_values),
+            'total_count': len(df[col]),
+            'numeric_ratio': numeric_ratio,
+            'mixed_details': mixed_details[:10]  # أول 10 تفاصيل فقط
+        }
+
+    return column_types, column_stats
+
+
+def extract_numeric_values(series):
+    """استخراج القيم الرقمية من سلسلة تحتوي على نصوص وأرقام"""
+    numeric_values = []
+    indices = []
+
+    for idx, value in enumerate(series):
+        if pd.isna(value):
+            continue
+
+        if isinstance(value, (int, float)):
+            numeric_values.append(float(value))
+            indices.append(idx)
+        elif isinstance(value, str):
+            # البحث عن أول رقم في النص
+            numbers = re.findall(r'-?\d+\.?\d*', value)
+            if numbers:
+                numeric_values.append(float(numbers[0]))
+                indices.append(idx)
+
+    return pd.Series(numeric_values, index=indices) if numeric_values else pd.Series(dtype=float)
+
+
+def advanced_data_analysis(values):
+    """تحليل متقدم للبيانات لتحديد النمط السائد"""
+    if len(values) == 0:
+        return {'pattern': 'unknown', 'confidence': 0.0}
+
+    values_series = pd.Series(values)
+    valid_values = values_series.dropna()
+
+    if len(valid_values) == 0:
+        return {'pattern': 'unknown', 'confidence': 0.0}
+
+    # تحليل متقدم لأنواع البيانات
+    pure_fractions = [x for x in valid_values if 0 < x < 1]  # كسور نقية
+    likely_fractions = [x for x in valid_values if 0 < x < 2]  # كسور محتملة
+    small_percentages = [x for x in valid_values if 1 <= x <= 20]  # نسب صغيرة
+    medium_percentages = [
+        x for x in valid_values if 20 < x <= 100]  # نسب متوسطة
+    large_percentages = [
+        x for x in valid_values if 100 < x <= 1000]  # نسب كبيرة
+    very_large_numbers = [
+        x for x in valid_values if x > 1000]  # أعداد كبيرة جداً
+
+    # الإحصاءات
+    stats = {
+        'min': valid_values.min(),
+        'max': valid_values.max(),
+        'mean': valid_values.mean(),
+        'std': valid_values.std(),
+        'q25': valid_values.quantile(0.25),
+        'q75': valid_values.quantile(0.75)
+    }
+
+    total_count = len(valid_values)
+
+    # حساب النسب
+    ratios = {
+        'pure_fractions': len(pure_fractions) / total_count,
+        'likely_fractions': len(likely_fractions) / total_count,
+        'small_percentages': len(small_percentages) / total_count,
+        'medium_percentages': len(medium_percentages) / total_count,
+        'large_percentages': len(large_percentages) / total_count,
+        'very_large': len(very_large_numbers) / total_count
+    }
+
+    # تحديد النمط السائد
+    patterns = []
+
+    # نمط الكسور
+    if ratios['pure_fractions'] >= 0.6:
+        patterns.append(('fractions', ratios['pure_fractions'] + 0.2))
+    elif ratios['likely_fractions'] >= 0.7:
+        patterns.append(('fractions', ratios['likely_fractions']))
+
+    # نمط النسب المئوية
+    if ratios['medium_percentages'] >= 0.6:
+        patterns.append(('percentages', ratios['medium_percentages'] + 0.15))
+    elif (ratios['small_percentages'] + ratios['medium_percentages']) >= 0.65:
+        patterns.append(
+            ('percentages', (ratios['small_percentages'] + ratios['medium_percentages']) * 0.9))
+
+    # نمط الأعداد الكبيرة
+    if ratios['very_large'] >= 0.5:
+        patterns.append(('large_numbers', ratios['very_large']))
+
+    # تحليل إحصائي إضافي
+    if stats['mean'] < 0.5 and stats['max'] < 1.0:
+        patterns.append(('fractions', 0.8))
+    elif 1 < stats['mean'] < 100 and stats['max'] <= 100:
+        patterns.append(('percentages', 0.7))
+
+    # اختيار النمط الأكثر ثقة
+    if patterns:
+        best_pattern = max(patterns, key=lambda x: x[1])
+        return {'pattern': best_pattern[0], 'confidence': best_pattern[1], 'stats': stats, 'ratios': ratios}
+    else:
+        # إذا لم يكن هناك نمط واضح، نستخدم الإحصاءات
+        if stats['mean'] < 1.0:
+            return {'pattern': 'fractions', 'confidence': 0.6, 'stats': stats, 'ratios': ratios}
+        elif stats['mean'] < 100:
+            return {'pattern': 'percentages', 'confidence': 0.6, 'stats': stats, 'ratios': ratios}
+        else:
+            return {'pattern': 'large_numbers', 'confidence': 0.5, 'stats': stats, 'ratios': ratios}
+
+
+def smart_normalize_data(values):
+    """تطبيع ذكي للبيانات - الغالبية تحكم الأقلية بذكاء عالي"""
+    if len(values) == 0:
+        return values, {'action': 'none', 'reason': 'no_data'}
+
+    values_series = pd.Series(values)
+    valid_values = values_series.dropna()
+
+    if len(valid_values) == 0:
+        return values, {'action': 'none', 'reason': 'no_valid_data'}
+
+    # تحليل متقدم للبيانات
+    analysis = advanced_data_analysis(values)
+    pattern = analysis['pattern']
+    confidence = analysis['confidence']
+    stats = analysis['stats']
+
+    print(
+        f"🧠 Smart Analysis - Pattern: {pattern}, Confidence: {confidence:.2f}")
+    print(
+        f"📊 Stats - Min: {stats['min']:.4f}, Max: {stats['max']:.4f}, Mean: {stats['mean']:.4f}")
+    print(f"📈 Ratios - {analysis['ratios']}")
+
+    # قرارات الذكاء الاصطناعي
+    if pattern == 'fractions' and confidence >= 0.6:
+        print("✅ Decision: Converting all to FRACTIONS (majority rules)")
+        result = convert_to_fractions(values_series)
+        return result.tolist(), {
+            'action': 'to_fractions',
+            'confidence': confidence,
+            'original_range': [stats['min'], stats['max']],
+            'new_range': [result.min(), result.max()]
+        }
+
+    elif pattern == 'percentages' and confidence >= 0.6:
+        print("✅ Decision: Converting all to PERCENTAGES (majority rules)")
+        result = convert_to_percentages(values_series)
+        return result.tolist(), {
+            'action': 'to_percentages',
+            'confidence': confidence,
+            'original_range': [stats['min'], stats['max']],
+            'new_range': [result.min(), result.max()]
+        }
+
+    elif pattern == 'large_numbers' and confidence >= 0.5:
+        print("✅ Decision: Keeping as LARGE NUMBERS")
+        return values, {
+            'action': 'keep_large',
+            'confidence': confidence,
+            'reason': 'large_numbers_detected'
+        }
+
+    else:
+        print("✅ Decision: No conversion needed - keeping original values")
+        return values, {
+            'action': 'none',
+            'confidence': confidence,
+            'reason': 'no_clear_pattern'
+        }
+
+
+def convert_to_fractions(series):
+    """تحويل جميع القيم إلى كسور"""
+    result = series.copy()
+    for i, val in enumerate(result):
+        if not pd.isna(val):
+            if val >= 1.0:
+                # إذا كانت قيمة كبيرة، نقسمها على 100
+                result.iloc[i] = val / 100.0
+            # إذا كانت بالفعل كسر، نتركها كما هي
+    return result
+
+
+def convert_to_percentages(series):
+    """تحويل جميع القيم إلى نسب مئوية"""
+    result = series.copy()
+    for i, val in enumerate(result):
+        if not pd.isna(val):
+            if val < 1.0:
+                # إذا كانت كسر، نضربها في 100
+                result.iloc[i] = val * 100.0
+            # إذا كانت بالفعل نسبة مئوية، نتركها كما هي
+    return result
+
+
+def auto_detect_coordinate_columns(df, column_types):
+    """اكتشاف تلقائي ذكي لأعمدة الإحداثيات"""
+    potential_columns = {
+        'x': [], 'y': [], 'z': []
+    }
+
+    for col, col_type in column_types.items():
+        if col_type in ['numeric', 'mixed_numeric']:
+            numeric_values = extract_numeric_values(df[col])
+            if len(numeric_values) > 0:
+                stats = {
+                    'min': numeric_values.min(),
+                    'max': numeric_values.max(),
+                    'range': numeric_values.max() - numeric_values.min(),
+                    'mean': numeric_values.mean(),
+                    'std': numeric_values.std()
+                }
+
+                # تحليل النمط لتحديد نوع العمود
+                col_analysis = advanced_data_analysis(numeric_values.tolist())
+
+                # إحداثيات X (عادة نطاق واسع، قيم كبيرة)
+                if stats['range'] > 1000 and stats['min'] >= 0 and col_analysis['pattern'] == 'large_numbers':
+                    score = stats['range'] / 1000 + col_analysis['confidence']
+                    potential_columns['x'].append((col, score, stats))
+
+                # إحداثيات Y (نطاق واسع أيضاً)
+                elif stats['range'] > 1000 and stats['min'] >= 0:
+                    score = stats['range'] / 1000 + col_analysis['confidence']
+                    potential_columns['y'].append((col, score, stats))
+
+                # قيم Z (عادة نطاق أصغر، كسور أو نسب)
+                elif stats['range'] < 1000 or col_analysis['pattern'] in ['fractions', 'percentages']:
+                    score = (1 / (stats['range'] + 1)) + \
+                        col_analysis['confidence']
+                    potential_columns['z'].append((col, score, stats))
+
+    # ترتيب حسب الأفضلية واختيار الأفضل
+    result = {}
+    for coord_type, candidates in potential_columns.items():
+        if candidates:
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            result[coord_type] = candidates[0][0]
+            print(
+                f"🎯 Auto-detected {coord_type.upper()}: {candidates[0][0]} (score: {candidates[0][1]:.2f})")
+        else:
+            result[coord_type] = None
+
+    return result
+
+
 def clean_dataframe(df):
-    """تنظيف DataFrame وتحويل قيم NaN إلى قيم مناسبة لـ JSON"""
+    """تنظيف وتحسين DataFrame بذكاء"""
     df_clean = df.copy()
 
-    # تحويل قيم NaN في جميع الأعمدة
-    for col in df_clean.columns:
-        if df_clean[col].dtype in ['float64', 'int64']:
-            df_clean[col] = df_clean[col].apply(
-                lambda x: None if pd.isna(x) else x)
-        else:
-            df_clean[col] = df_clean[col].apply(
-                lambda x: None if pd.isna(x) else str(x))
+    # اكتشاف أنواع الأعملة بذكاء
+    column_types, column_stats = smart_column_detection(df_clean)
 
-    return df_clean
+    print("🔍 Column Analysis Results:")
+    for col, col_type in column_types.items():
+        stats = column_stats[col]
+        print(
+            f"   {col}: {col_type} (numeric: {stats['numeric_count']}/{stats['total_count']})")
+
+    # معالجة كل عميل حسب نوعه
+    normalization_report = {}
+
+    for col in df_clean.columns:
+        if column_types.get(col) in ['numeric', 'mixed_numeric']:
+            # استخراج القيم الرقمية
+            numeric_series = extract_numeric_values(df_clean[col])
+            if len(numeric_series) > 0:
+                # تطبيع ذكي للبيانات
+                normalized_values, normalization_info = smart_normalize_data(
+                    numeric_series.tolist())
+                normalization_report[col] = normalization_info
+
+                # تحديث العميل بالقيم المعالجة
+                new_series = pd.Series([None] * len(df_clean))
+                valid_indices = numeric_series.index
+                for i, idx in enumerate(valid_indices):
+                    if i < len(normalized_values):
+                        new_series[idx] = normalized_values[i]
+
+                df_clean[col] = new_series
+
+    print("📋 Normalization Report:")
+    for col, report in normalization_report.items():
+        print(
+            f"   {col}: {report['action']} (confidence: {report.get('confidence', 0):.2f})")
+
+    return df_clean, column_types, normalization_report
 
 
 def convert_to_serializable(obj):
@@ -104,7 +426,7 @@ class ContourMap:
 
         except Exception as e:
             print(f"KNN interpolation error: {e}")
-            return 0.0  # قيمة افتراضية في حالة الخطأ
+            return 0.0
 
     def plot_knn_map(self, target_x=None, target_y=None, n_neighbors=5, title="KNN Interpolation"):
         """Create contour map with optional target point"""
@@ -142,7 +464,7 @@ class ContourMap:
                                   alpha=0.8, cmap='viridis')
             contour_lines = ax.contour(xi, yi, zi, levels=12, linewidths=0.8,
                                        colors='black', alpha=0.5)
-            ax.clabel(contour_lines, inline=True, fontsize=7, fmt='%.1f')
+            ax.clabel(contour_lines, inline=True, fontsize=7, fmt='%.3f')
 
             # رسم نقاط البيانات الأصلية
             scatter = ax.scatter(self.X, self.Y, c=self.Z, s=60,
@@ -155,7 +477,7 @@ class ContourMap:
                         target_x, target_y, n_neighbors)
                     ax.scatter([target_x], [target_y], c='red', s=150,
                                marker='*', edgecolors='black', linewidth=1.5,
-                               label=f'Target Point\nZ = {target_z:.2f}')
+                               label=f'Target Point\nZ = {target_z:.4f}')
                     ax.legend(loc='upper right', fontsize=9)
                 except:
                     pass
@@ -223,24 +545,31 @@ def upload_file():
             return jsonify({'error': 'No file selected'}), 400
 
         if not allowed_file(file.filename):
-            return jsonify({'error': 'Invalid file type. Please upload Excel files only.'}), 400
+            return jsonify({'error': 'Invalid file type. Please upload Excel or CSV files only.'}), 400
 
-        # Read Excel file
+        # Read file based on extension
         try:
-            df = pd.read_excel(file)
+            if file.filename.lower().endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
         except Exception as e:
-            return jsonify({'error': f'Error reading Excel file: {str(e)}'}), 400
+            return jsonify({'error': f'Error reading file: {str(e)}'}), 400
 
         if df.empty:
             return jsonify({'error': 'The uploaded file is empty'}), 400
 
-        # تنظيف البيانات
-        df_clean = clean_dataframe(df)
+        # تنظيف البيانات واكتشاف الأنواع
+        df_clean, column_types, normalization_report = clean_dataframe(df)
+
+        # الاكتشاف التلقائي للإحداثيات
+        auto_columns = auto_detect_coordinate_columns(df_clean, column_types)
 
         # Return column information
-        numeric_cols = df_clean.select_dtypes(
-            include=[np.number]).columns.tolist()
-        text_cols = df_clean.select_dtypes(include=['object']).columns.tolist()
+        numeric_cols = [col for col, col_type in column_types.items()
+                        if col_type in ['numeric', 'mixed_numeric']]
+        text_cols = [col for col, col_type in column_types.items()
+                     if col_type == 'text']
         all_cols = df_clean.columns.tolist()
 
         # تحويل المعاينة إلى شكل قابل للتسلسل
@@ -254,7 +583,10 @@ def upload_file():
             'text_columns': text_cols,
             'all_columns': all_cols,
             'preview': preview_data,
-            'total_rows': len(df_clean)
+            'total_rows': len(df_clean),
+            'auto_detected_columns': auto_columns,
+            'column_types': column_types,
+            'normalization_report': normalization_report
         }
 
         return jsonify(columns)
@@ -267,7 +599,6 @@ def upload_file():
 def interpolate():
     """Perform KNN interpolation and return results"""
     try:
-        # التحقق من وجود ملف
         if 'file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
 
@@ -297,8 +628,11 @@ def interpolate():
 
         # قراءة وتنظيف البيانات
         try:
-            df = pd.read_excel(file)
-            df_clean = clean_dataframe(df)
+            if file.filename.lower().endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
+            df_clean, column_types, normalization_report = clean_dataframe(df)
         except Exception as e:
             return jsonify({'error': f'Error reading data: {str(e)}'}), 400
 
@@ -307,19 +641,14 @@ def interpolate():
             if col not in df_clean.columns:
                 return jsonify({'error': f'Column {col} not found in data'}), 400
 
-        # إزالة الصفوف التي تحتوي على قيم مفقودة في الأعمدة المطلوبة
-        df_filtered = df_clean.dropna(subset=[x_col, y_col, z_col])
+        # استخراج البيانات الرقمية من الأعمدة
+        X = extract_numeric_values(df_clean[x_col])
+        Y = extract_numeric_values(df_clean[y_col])
+        Z = extract_numeric_values(df_clean[z_col])
 
-        if len(df_filtered) == 0:
-            return jsonify({'error': 'No valid data points after removing missing values'}), 400
-
-        if len(df_filtered) < n_neighbors:
-            return jsonify({'error': f'Not enough data points. Need at least {n_neighbors}, but only {len(df_filtered)} available'}), 400
-
-        # استخراج البيانات
-        X = pd.to_numeric(df_filtered[x_col], errors='coerce').dropna()
-        Y = pd.to_numeric(df_filtered[y_col], errors='coerce').dropna()
-        Z = pd.to_numeric(df_filtered[z_col], errors='coerce').dropna()
+        # تطبيع ذكي لقيم Z
+        Z_normalized, normalization_info = smart_normalize_data(Z.tolist())
+        Z = pd.Series(Z_normalized)
 
         # التأكد من أن جميع المصفوفات لها نفس الطول
         min_length = min(len(X), len(Y), len(Z))
@@ -327,12 +656,16 @@ def interpolate():
         Y = Y.iloc[:min_length]
         Z = Z.iloc[:min_length]
 
+        if len(X) == 0:
+            return jsonify({'error': 'No valid numeric data found in the specified columns'}), 400
+
+        if len(X) < n_neighbors:
+            return jsonify({'error': f'Not enough data points. Need at least {n_neighbors}, but only {len(X)} available'}), 400
+
         well_names = None
-        if well_col and well_col in df_filtered.columns:
-            well_names = df_filtered[well_col].astype(str).tolist()[
-                :min_length]
+        if well_col and well_col in df_clean.columns:
+            well_names = df_clean[well_col].astype(str).tolist()[:min_length]
         else:
-            # إنشاء أسماء آبار افتراضية إذا لم يتم توفيرها
             well_names = [f"Well_{i+1}" for i in range(min_length)]
 
         # إنشاء خريطة الكنتور
@@ -342,7 +675,6 @@ def interpolate():
         interpolated_z = contour_map.knn_interpolation(
             target_x, target_y, n_neighbors)
 
-        # التأكد من أن القيمة رقمية
         if interpolated_z is None or np.isnan(interpolated_z):
             interpolated_z = 0.0
         else:
@@ -382,7 +714,9 @@ def interpolate():
             'n_neighbors': n_neighbors,
             'nearest_neighbors': nearest_neighbors,
             'contour_plot': f"data:image/png;base64,{plot_base64}",
-            'total_data_points': len(X)
+            'total_data_points': len(X),
+            'data_normalization_applied': normalization_info['action'] != 'none',
+            'normalization_details': normalization_info
         }
 
         return jsonify(response)
@@ -396,7 +730,8 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'PetroAI KNN Interpolation',
-        'version': '1.0'
+        'version': '2.0',
+        'features': 'Advanced AI data normalization, CSV/Excel support, Smart pattern detection'
     })
 
 
