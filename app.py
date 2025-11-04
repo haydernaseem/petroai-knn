@@ -67,7 +67,7 @@ def smart_column_detection(df):
                     mixed_details.append(
                         {'index': idx, 'value': value, 'type': 'text_only'})
 
-        # تحديد نوع العمود
+        # تحديد نوع العمول
         numeric_ratio = len(numeric_values) / \
             len(df[col]) if len(df[col]) > 0 else 0
 
@@ -91,22 +91,18 @@ def smart_column_detection(df):
 
 
 def extract_numeric_values(series):
-    """استخراج القيم الرقمية من سلسلة تحتوي على نصوص وأرقام مع معالجة القيم المفقودة"""
+    """استخراج القيم الرقمية من سلسلة تحتوي على نصوص وأرقام"""
     numeric_values = []
     indices = []
 
     for idx, value in enumerate(series):
-        # تخطي القيم المفقودة أو الفارغة تماماً
-        if pd.isna(value) or value == '' or value is None:
+        if pd.isna(value):
             continue
 
         if isinstance(value, (int, float)):
             numeric_values.append(float(value))
             indices.append(idx)
         elif isinstance(value, str):
-            # تخطي السلاسل الفارغة أو التي تحتوي على مسافات فقط
-            if value.strip() == '':
-                continue
             # البحث عن أول رقم في النص
             numbers = re.findall(r'-?\d+\.?\d*', value)
             if numbers:
@@ -337,7 +333,7 @@ def auto_detect_coordinate_columns(df, column_types):
 
 
 def clean_dataframe(df):
-    """تنظيف وتحسين DataFrame بذكاء مع إزالة الصفوف التي تحتوي على قيم مفقودة في الأعمدة الأساسية"""
+    """تنظيف وتحسين DataFrame بذكاء"""
     df_clean = df.copy()
 
     # اكتشاف أنواع الأعملة بذكاء
@@ -466,8 +462,8 @@ class ContourMap:
             # إنشاء رسم الكنتور
             contour = ax.contourf(xi, yi, zi, levels=15,
                                   alpha=0.8, cmap='viridis')
-            contour_lines = ax.contour(
-                xi, yi, zi, levels=12, linewidths=0.8, colors='black', alpha=0.5)
+            contour_lines = ax.contour(xi, yi, zi, levels=12, linewidths=0.8,
+                                       colors='black', alpha=0.5)
             ax.clabel(contour_lines, inline=True, fontsize=7, fmt='%.3f')
 
             # رسم نقاط البيانات الأصلية
@@ -479,8 +475,9 @@ class ContourMap:
                 try:
                     target_z = self.knn_interpolation(
                         target_x, target_y, n_neighbors)
-                    ax.scatter([target_x], [target_y], c='red', s=150, marker='*',
-                               edgecolors='black', linewidth=1.5, label=f'Target Point\nZ = {target_z:.4f}')
+                    ax.scatter([target_x], [target_y], c='red', s=150,
+                               marker='*', edgecolors='black', linewidth=1.5,
+                               label=f'Target Point\nZ = {target_z:.4f}')
                     ax.legend(loc='upper right', fontsize=9)
                 except:
                     pass
@@ -569,8 +566,8 @@ def upload_file():
         auto_columns = auto_detect_coordinate_columns(df_clean, column_types)
 
         # Return column information
-        numeric_cols = [col for col, col_type in column_types.items() if col_type in [
-            'numeric', 'mixed_numeric']]
+        numeric_cols = [col for col, col_type in column_types.items()
+                        if col_type in ['numeric', 'mixed_numeric']]
         text_cols = [col for col, col_type in column_types.items()
                      if col_type == 'text']
         all_cols = df_clean.columns.tolist()
@@ -649,37 +646,27 @@ def interpolate():
         Y = extract_numeric_values(df_clean[y_col])
         Z = extract_numeric_values(df_clean[z_col])
 
-        # 🔥 التغيير الجوهري: الحفاظ على التوافق بين الأعمدة
-        # نأخذ فقط النقاط التي تحتوي على قيم صالحة في جميع الأعمدة الثلاثة
-        common_indices = X.index.intersection(Y.index).intersection(Z.index)
-
-        if len(common_indices) == 0:
-            return jsonify({'error': 'No complete data points found (all points have missing values in one or more columns)'}), 400
-
-        X = X.loc[common_indices]
-        Y = Y.loc[common_indices]
-        Z = Z.loc[common_indices]
-
-        print(
-            f"✅ Using {len(X)} complete data points (removed {len(df_clean) - len(X)} points with missing values)")
-
         # تطبيع ذكي لقيم Z
         Z_normalized, normalization_info = smart_normalize_data(Z.tolist())
-        Z = pd.Series(Z_normalized, index=common_indices)
+        Z = pd.Series(Z_normalized)
+
+        # التأكد من أن جميع المصفوفات لها نفس الطول
+        min_length = min(len(X), len(Y), len(Z))
+        X = X.iloc[:min_length]
+        Y = Y.iloc[:min_length]
+        Z = Z.iloc[:min_length]
 
         if len(X) == 0:
             return jsonify({'error': 'No valid numeric data found in the specified columns'}), 400
 
         if len(X) < n_neighbors:
-            return jsonify({'error': f'Not enough complete data points. Need at least {n_neighbors}, but only {len(X)} available after removing missing values'}), 400
+            return jsonify({'error': f'Not enough data points. Need at least {n_neighbors}, but only {len(X)} available'}), 400
 
         well_names = None
         if well_col and well_col in df_clean.columns:
-            # أخذ أسماء الآبار فقط للنقاط الصالحة
-            well_names = df_clean.loc[common_indices,
-                                      well_col].astype(str).tolist()
+            well_names = df_clean[well_col].astype(str).tolist()[:min_length]
         else:
-            well_names = [f"Well_{i+1}" for i in range(len(X))]
+            well_names = [f"Well_{i+1}" for i in range(min_length)]
 
         # إنشاء خريطة الكنتور
         contour_map = ContourMap(X, Y, Z, well_names)
@@ -696,7 +683,7 @@ def interpolate():
         # إنشاء الرسم
         plot_buffer = contour_map.plot_knn_map(
             target_x, target_y, n_neighbors,
-            f"KNN Interpolation Map\nTarget: ({target_x:.1f}, {target_y:.1f}) | k={n_neighbors}\nUsing {len(X)} complete data points"
+            f"KNN Interpolation Map\nTarget: ({target_x:.1f}, {target_y:.1f}) | k={n_neighbors}"
         )
 
         # تحويل الرسم إلى base64
@@ -728,8 +715,6 @@ def interpolate():
             'nearest_neighbors': nearest_neighbors,
             'contour_plot': f"data:image/png;base64,{plot_base64}",
             'total_data_points': len(X),
-            'original_data_points': len(df_clean),
-            'removed_points_with_missing_values': len(df_clean) - len(X),
             'data_normalization_applied': normalization_info['action'] != 'none',
             'normalization_details': normalization_info
         }
